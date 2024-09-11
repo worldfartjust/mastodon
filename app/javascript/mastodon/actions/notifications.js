@@ -1,9 +1,6 @@
 import { IntlMessageFormat } from 'intl-messageformat';
 import { defineMessages } from 'react-intl';
 
-import { List as ImmutableList } from 'immutable';
-
-import { compareId } from 'mastodon/compare_id';
 import { usePendingItems as preferPendingItems } from 'mastodon/initial_state';
 
 import api, { getLinks } from '../api';
@@ -27,17 +24,9 @@ export * from "./notifications_typed";
 
 export const NOTIFICATIONS_UPDATE_NOOP = 'NOTIFICATIONS_UPDATE_NOOP';
 
-export const NOTIFICATIONS_EXPAND_REQUEST = 'NOTIFICATIONS_EXPAND_REQUEST';
-export const NOTIFICATIONS_EXPAND_SUCCESS = 'NOTIFICATIONS_EXPAND_SUCCESS';
-export const NOTIFICATIONS_EXPAND_FAIL    = 'NOTIFICATIONS_EXPAND_FAIL';
-
 export const NOTIFICATIONS_FILTER_SET = 'NOTIFICATIONS_FILTER_SET';
 
 export const NOTIFICATIONS_SCROLL_TOP   = 'NOTIFICATIONS_SCROLL_TOP';
-export const NOTIFICATIONS_LOAD_PENDING = 'NOTIFICATIONS_LOAD_PENDING';
-
-export const NOTIFICATIONS_MOUNT   = 'NOTIFICATIONS_MOUNT';
-export const NOTIFICATIONS_UNMOUNT = 'NOTIFICATIONS_UNMOUNT';
 
 export const NOTIFICATIONS_MARK_AS_READ = 'NOTIFICATIONS_MARK_AS_READ';
 
@@ -98,10 +87,6 @@ const selectNotificationCountForRequest = (state, id) => {
   const thisRequest = requests.find(request => request.get('id') === id);
   return thisRequest ? thisRequest.get('notifications_count') : 0;
 };
-
-export const loadPending = () => ({
-  type: NOTIFICATIONS_LOAD_PENDING,
-});
 
 export function updateNotifications(notification, intlMessages, intlLocale) {
   return (dispatch, getState) => {
@@ -165,109 +150,7 @@ export function updateNotifications(notification, intlMessages, intlLocale) {
   };
 }
 
-const excludeTypesFromSettings = state => state.getIn(['settings', 'notifications', 'shows']).filter(enabled => !enabled).keySeq().toJS();
-
-const excludeTypesFromFilter = filter => {
-  const allTypes = ImmutableList([
-    'follow',
-    'follow_request',
-    'favourite',
-    'reblog',
-    'mention',
-    'poll',
-    'status',
-    'update',
-    'admin.sign_up',
-    'admin.report',
-  ]);
-
-  return allTypes.filterNot(item => item === filter).toJS();
-};
-
 const noOp = () => {};
-
-let expandNotificationsController = new AbortController();
-
-export function expandNotifications({ maxId = undefined, forceLoad = false }) {
-  return async (dispatch, getState) => {
-    const activeFilter = getState().getIn(['settings', 'notifications', 'quickFilter', 'active']);
-    const notifications = getState().get('notifications');
-    const isLoadingMore = !!maxId;
-
-    if (notifications.get('isLoading')) {
-      if (forceLoad) {
-        expandNotificationsController.abort();
-        expandNotificationsController = new AbortController();
-      } else {
-        return;
-      }
-    }
-
-    const params = {
-      max_id: maxId,
-      exclude_types: activeFilter === 'all'
-        ? excludeTypesFromSettings(getState())
-        : excludeTypesFromFilter(activeFilter),
-    };
-
-    if (!params.max_id && (notifications.get('items', ImmutableList()).size + notifications.get('pendingItems', ImmutableList()).size) > 0) {
-      const a = notifications.getIn(['pendingItems', 0, 'id']);
-      const b = notifications.getIn(['items', 0, 'id']);
-
-      if (a && b && compareId(a, b) > 0) {
-        params.since_id = a;
-      } else {
-        params.since_id = b || a;
-      }
-    }
-
-    const isLoadingRecent = !!params.since_id;
-
-    dispatch(expandNotificationsRequest(isLoadingMore));
-
-    try {
-      const response = await api().get('/api/v1/notifications', { params, signal: expandNotificationsController.signal });
-      const next = getLinks(response).refs.find(link => link.rel === 'next');
-
-      dispatch(importFetchedAccounts(response.data.map(item => item.account)));
-      dispatch(importFetchedStatuses(response.data.map(item => item.status).filter(status => !!status)));
-      dispatch(importFetchedAccounts(response.data.filter(item => item.report).map(item => item.report.target_account)));
-
-      dispatch(expandNotificationsSuccess(response.data, next ? next.uri : null, isLoadingMore, isLoadingRecent, isLoadingRecent && preferPendingItems));
-      fetchRelatedRelationships(dispatch, response.data);
-      dispatch(submitMarkers());
-    } catch(error) {
-      dispatch(expandNotificationsFail(error, isLoadingMore));
-    }
-  };
-}
-
-export function expandNotificationsRequest(isLoadingMore) {
-  return {
-    type: NOTIFICATIONS_EXPAND_REQUEST,
-    skipLoading: !isLoadingMore,
-  };
-}
-
-export function expandNotificationsSuccess(notifications, next, isLoadingMore, isLoadingRecent, usePendingItems) {
-  return {
-    type: NOTIFICATIONS_EXPAND_SUCCESS,
-    notifications,
-    next,
-    isLoadingRecent: isLoadingRecent,
-    usePendingItems,
-    skipLoading: !isLoadingMore,
-  };
-}
-
-export function expandNotificationsFail(error, isLoadingMore) {
-  return {
-    type: NOTIFICATIONS_EXPAND_FAIL,
-    error,
-    skipLoading: !isLoadingMore,
-    skipAlert: !isLoadingMore || error.name === 'AbortError',
-  };
-}
 
 export function scrollTopNotifications(top) {
   return {
@@ -283,19 +166,9 @@ export function setFilter (filterType) {
       path: ['notifications', 'quickFilter', 'active'],
       value: filterType,
     });
-    dispatch(expandNotifications({ forceLoad: true }));
     dispatch(saveSettings());
   };
 }
-
-export const mountNotifications = () => ({
-  type: NOTIFICATIONS_MOUNT,
-});
-
-export const unmountNotifications = () => ({
-  type: NOTIFICATIONS_UNMOUNT,
-});
-
 
 export const markNotificationsAsRead = () => ({
   type: NOTIFICATIONS_MARK_AS_READ,

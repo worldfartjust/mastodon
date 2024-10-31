@@ -148,6 +148,29 @@ Rails.application.routes.draw do
     end
   end
 
+  resources :accounts, path: 'u', only: [:show], param: :id, as: :numeric_account do
+    resources :statuses, only: [:show] do
+      member do
+        get :activity
+        get :embed
+      end
+
+      resources :replies, only: [:index], module: :activitypub
+      resources :likes, only: [:index], module: :activitypub
+      resources :shares, only: [:index], module: :activitypub
+    end
+
+    resources :followers, only: [:index], controller: :follower_accounts
+    resources :following, only: [:index], controller: :following_accounts
+
+    scope module: :activitypub do
+      resource :outbox, only: [:show]
+      resource :inbox, only: [:create]
+      resources :collections, only: [:show]
+      resource :followers_synchronization, only: [:show]
+    end
+  end
+
   resource :inbox, only: [:create], module: :activitypub
 
   constraints(encoded_path: /%40.*/) do

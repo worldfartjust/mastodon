@@ -99,7 +99,7 @@ class ActivityPub::TagManager
     when 'public'
       [COLLECTIONS[:public]]
     when 'unlisted', 'private'
-      [account_followers_url(status.account)]
+      [followers_uri_for(status.account)]
     when 'direct', 'limited'
       if status.account.silenced?
         # Only notify followers if the account is locally silenced
@@ -133,7 +133,7 @@ class ActivityPub::TagManager
 
     case status.visibility
     when 'public'
-      cc << account_followers_url(status.account)
+      cc << followers_uri_for(status.account)
     when 'unlisted'
       cc << COLLECTIONS[:public]
     end
